@@ -666,3 +666,55 @@ impl<'env> RustTypeBuilder<'env> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use self::super::*;
+    use crate::{Config, Library, namespaces_run, symbols_run, class_hierarchy_run};
+    use std::cell::RefCell;
+    use crate::library::{Type, TypeId};
+
+    fn new_env() -> Env {
+        let library = Library::new("GLib");
+        let config = Config::new(
+            Some("tests/sys/gir-glib.toml"),
+            None,
+            &[],
+            Some("glib"),
+            Some("0.0.0"),
+            None,
+            None,
+            false,
+            false,
+            false,
+        )
+        .expect("Build test config");
+
+        let namespaces = namespaces_run(&library);
+        let symbols = symbols_run(&library, &namespaces);
+        let class_hierarchy = class_hierarchy_run(&library);
+
+        Env {
+            library,
+            config,
+            namespaces,
+            symbols: RefCell::new(symbols),
+            class_hierarchy,
+            analysis: Default::default(),
+        }
+    }
+
+    #[test]
+    fn transform_c_array_of_str() {
+        let mut env = new_env();
+
+        let str_array = Type::c_array(&mut env.library, TypeId::tid_utf8(), None, None);
+        let ty = RustTypeBuilder::new(&env, str_array)
+            .ref_mode(RefMode::ByRef)
+            .try_build()
+            .expect("Shall build");
+
+        let type_desc = ty.into_string();
+        assert_eq!(&type_desc, "&[&str]");
+    }
+}
